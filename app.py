@@ -1,19 +1,43 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
+import gspread
 
 st.set_page_config(page_title="60-Min Workout Tracker", page_icon="🏋️‍♂️", layout="centered")
 st.title("🏋️‍♂️ 60-Min Workout Tracker")
 
-# --- INITIALIZE GOOGLE SHEETS CONNECTION ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- INITIALIZE NATIVE GOOGLE SHEETS CONNECTION ---
+@st.cache_resource
+def get_gspread_client():
+    # Authenticate directly using the secrets you already stored in Streamlit Advanced Settings
+    creds = {
+        "type": st.secrets["connections"]["gsheets"]["type"],
+        "project_id": st.secrets["connections"]["gsheets"]["project_id"],
+        "private_key_id": st.secrets["connections"]["gsheets"]["private_key_id"],
+        "private_key": st.secrets["connections"]["gsheets"]["private_key"],
+        "client_email": st.secrets["connections"]["gsheets"]["client_email"],
+        "client_id": st.secrets["connections"]["gsheets"]["client_id"],
+        "auth_uri": st.secrets["connections"]["gsheets"]["auth_uri"],
+        "token_uri": st.secrets["connections"]["gsheets"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["connections"]["gsheets"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["connections"]["gsheets"]["client_x509_cert_url"]
+    }
+    return gspread.service_account_from_dict(creds)
 
-# Fetch existing data from the "Logs" sheet
 try:
-    existing_df = conn.read(worksheet="Logs", ttl="0d") 
-    existing_df = existing_df.dropna(how="all")
-except Exception:
+    gc = get_gspread_client()
+    spreadsheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    sh = gc.open_by_url(spreadsheet_url)
+    worksheet = sh.worksheet("Logs")
+    
+    # Read existing data cleanly into a dataframe
+    records = worksheet.get_all_records()
+    if records:
+        existing_df = pd.DataFrame(records)
+    else:
+        existing_df = pd.DataFrame(columns=["Date", "Exercise", "Weight (lbs)", "Reps", "Difficulty"])
+except Exception as e:
+    st.error(f"Database connection error: {e}")
     existing_df = pd.DataFrame(columns=["Date", "Exercise", "Weight (lbs)", "Reps", "Difficulty"])
 
 # --- WORKOUT ROUTINE DEFINITIONS ---
@@ -66,7 +90,7 @@ st.subheader("Log Your Sets")
 exercise_input = st.selectbox("Select Exercise Lift:", available_exercises)
 
 # --- SMART PROGRESSIVE OVERLOAD COACHING ---
-if not existing_df.empty:
+if not existing_df.empty and "Exercise" in existing_df.columns:
     ex_history = existing_df[existing_df["Exercise"] == exercise_input].copy()
     
     if not ex_history.empty:
@@ -86,11 +110,11 @@ if not existing_df.empty:
             recommended_target += 0.5
             
         if exercise_input in ALL_ABS and last_max_weight == 0:
-            st.info(f"💡 **AI Coach Advice:** Last time you did this, you logged bodyweight reps. Try to beat your previous repetition count or duration!")
+            st.info(f"💡 **AI Coach Advice:** Last time you did this, you logged bodyweight reps. Try to beat your previous repetition count!")
         else:
             st.info(f"💡 **AI Coach Advice:** Last time you performed this exercise, your max weight was **{last_max_weight} lbs**. Today, aim for **{recommended_target} lbs** to stay on track with progressive overload!")
     else:
-        st.info("💡 **AI Coach Advice:** First time logging this movement! Pick a comfortable baseline weight/reps to establish your starting metric.")
+        st.info("💡 **AI Coach Advice:** First time logging this movement! Pick a comfortable baseline metric to establish your starting point.")
 
 if "session_log" not in st.session_state:
     st.session_state.session_log = []
@@ -124,35 +148,28 @@ if st.session_state.session_log:
             new_sets_df = pd.DataFrame(st.session_state.session_log)
             updated_df = pd.concat([existing_df, new_sets_df], ignore_index=True)
             
-            # Clean formats
+            # Formats uniform layout
             updated_df["Date"] = pd.to_datetime(updated_df["Date"]).dt.strftime("%Y-%m-%d")
             updated_df["Weight (lbs)"] = updated_df["Weight (lbs)"].astype(float)
             updated_df["Reps"] = updated_df["Reps"].astype(int)
             updated_df["Difficulty"] = updated_df["Difficulty"].astype(str)
             
-            # 🟢 THE FIXED SAVE BACKEND: Bypasses wrapper to write raw data matrix via gspread
             try:
-                # Grab backend client directly from connection structure
-                gc = conn._client
-                spreadsheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                sh = gc.open_by_url(spreadsheet_url)
-                worksheet = sh.worksheet("Logs")
-                
-                # Convert dataframe to a web-safe list of rows
+                # Direct data frame conversion to nested rows list for gspread
                 data_to_upload = [updated_df.columns.tolist()] + updated_df.values.tolist()
                 
-                # Clear and rewrite sheet securely
                 worksheet.clear()
-                worksheet.update(data_to_upload)
+                worksheet.update(values=data_to_upload, range_name="A1")
                 
                 st.success("Workout safely saved to Google Sheets!")
                 st.session_state.session_log = [] 
+                st.clear_cache() # Clears reading cache so updates display instantly
                 st.rerun()
-            except Exception as e:
-                st.error(f"Save failed via wrapper backend. Direct error detail: {e}")
+            except Exception as save_error:
+                st.error(f"Save failed: {save_error}")
 
 # --- HISTORICAL PROGRESS VISUALIZATION ---
-if not existing_df.empty:
+if not existing_df.empty and "Exercise" in existing_df.columns:
     st.write("---")
     st.header("📈 Progress History")
     
