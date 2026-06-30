@@ -14,7 +14,7 @@ try:
     existing_df = conn.read(worksheet="Logs", ttl="0d") 
     existing_df = existing_df.dropna(how="all")
 except Exception:
-    existing_df = pd.DataFrame(columns=["Date", "Exercise", "Weight (lbs)", "Reps"])
+    existing_df = pd.DataFrame(columns=["Date", "Exercise", "Weight (lbs)", "Reps", "Difficulty"])
 
 # --- WORKOUT ROUTINE DEFINITIONS ---
 ROUTINES = {
@@ -70,6 +70,9 @@ with st.form("log_form", clear_on_submit=True):
     weight_input = st.number_input("Weight (lbs)", min_value=0, step=5, value=100)
     reps_input = st.number_input("Reps Completed", min_value=0, step=1, value=10)
     
+    # NEW FEATURE: Effort tracking dropdown
+    difficulty_input = st.selectbox("Workout Intensity Feel:", ["Moderate", "Easy", "Hard"])
+    
     submit_set = st.form_submit_button("Record Set")
 
 if submit_set:
@@ -77,10 +80,11 @@ if submit_set:
         "Date": date_input.strftime("%Y-%m-%d"),
         "Exercise": exercise_input,
         "Weight (lbs)": int(weight_input),
-        "Reps": int(reps_input)
+        "Reps": int(reps_input),
+        "Difficulty": difficulty_input  # Appends the intensity choice
     }
     st.session_state.session_log.append(set_data)
-    st.success(f"Recorded: {exercise_input} — {weight_input} lbs x {reps_input} reps")
+    st.success(f"Recorded: {exercise_input} — {weight_input} lbs x {reps_input} reps ({difficulty_input})")
 
 # Live screen display of the ongoing session
 if st.session_state.session_log:
