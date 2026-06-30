@@ -41,7 +41,6 @@ except Exception as e:
 # --- WORKOUT ROUTINE DEFINITIONS ---
 ALL_ABS = ["Captain's Chair Leg Raises", "Plank", "Crunches", "Hanging Knee Raises", "Russian Twists"]
 
-# 🟢 REFACTOR: Days of the week completely removed from the labels
 ROUTINES = {
     "Push Focus": {
         "core": ["Bench Press Machine", "Leg Press Machine", "Dumbbell Shoulder Press", "Cable Tricep Pushdown", "Seated Dip Machine"],
@@ -79,9 +78,36 @@ REP_TARGETS = {
     "Plank": "30–60 seconds"
 }
 
+# 🟢 REFACTOR: Adjusted to 0.0 to strictly match plate weight tracked by the user
+def calculate_leg_press_plates(total_target_weight):
+    SLED_WEIGHT = 0.0 
+    weight_to_add = total_target_weight - SLED_WEIGHT
+    
+    if weight_to_add <= 0:
+        return "Load nothing!"
+        
+    weight_per_side = weight_to_add / 2.0
+    
+    plates = {45: 0, 25: 0, 10: 0, 5: 0}
+    remaining = weight_per_side
+    
+    for size in [45, 25, 10, 5]:
+        count = int(remaining // size)
+        plates[size] = count
+        remaining -= count * size
+        
+    parts = []
+    for size, count in plates.items():
+        if count > 0:
+            parts.append(f"{count}x {size} lb")
+            
+    if remaining > 0:
+        parts.append(f"{remaining} lbs")
+        
+    return f"Load **EACH SIDE** with: " + ", ".join(parts)
+
 # --- USER INTERFACE ---
 st.header("Today's Training Plan")
-# Defaults simply to the first item ("Push Focus") now instead of tracking specific days
 routine_choice = st.selectbox("Select Workout Routine:", list(ROUTINES.keys()), index=0)
 
 st.subheader("📋 Core Minimum Exercises")
@@ -129,7 +155,13 @@ if not existing_df.empty and "Exercise" in existing_df.columns:
         if exercise_input in ALL_ABS and last_max_weight == 0:
             st.info(f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Try to beat your previous repetition count or duration!")
         else:
-            st.info(f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Last time your max weight was **{last_max_weight} lbs**. Today, your target is **{recommended_target} lbs**!")
+            advice_text = f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Last time your max weight was **{last_max_weight} lbs**. Today, your target is **{recommended_target} lbs**!"
+            
+            if exercise_input == "Leg Press Machine":
+                plate_breakout = calculate_leg_press_plates(recommended_target)
+                advice_text += f"\n\n⚙️ **Plate Config:** {plate_breakout}"
+                
+            st.info(advice_text)
     else:
         st.info(f"💡 **AI Coach Advice:** First time logging this movement! Aim for **{target_rep_range}** at a comfortable baseline weight.")
 else:
