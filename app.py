@@ -7,30 +7,27 @@ st.set_page_config(page_title="60-Min Workout Tracker", page_icon="🏋️‍♂
 st.title("🏋️‍♂️ 60-Min Workout Tracker")
 
 # --- INITIALIZE GOOGLE SHEETS CONNECTION ---
-# This automatically looks for the [connections.gsheets] settings in your secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Fetch existing data from the "Logs" worksheet
+# Fetch existing data from the "Logs" sheet
 try:
-    existing_df = conn.read(worksheet="Logs", ttl="0d") # ttl=0 ensures it pulls live data every refresh
-    # Clean up empty rows if any exist
+    existing_df = conn.read(worksheet="Logs", ttl="0d") 
     existing_df = existing_df.dropna(how="all")
 except Exception:
-    # Fallback if the sheet is completely empty
     existing_df = pd.DataFrame(columns=["Date", "Exercise", "Weight (lbs)", "Reps"])
 
 # --- WORKOUT ROUTINE DEFINITIONS ---
 ROUTINES = {
     "Monday (Push Focus)": {
-        "core": ["Bench Press Machine", "Leg Press Machine", "Dumbbell Shoulder Press"],
-        "optional": ["Dumbbell Lateral Raise", "Overhead Dumbbell Tricep Extension"]
+        "core": ["Bench Press Machine", "Leg Press Machine", "Dumbbell Shoulder Press", "Cable Tricep Pushdown", "Seated Dip Machine"],
+        "optional": ["Dumbbell Lateral Raises"]
     },
     "Wednesday (Pull Focus)": {
         "core": ["Lat Pulldown Machine", "Seated Row Machine", "Dumbbell Bicep Curl"],
         "optional": ["Hammer Curls", "Face Pulls"]
     },
-    "Saturday (Isolation Focus)": {
-        "core": ["Leg Press Machine", "Chest Fly Machine"],
+    "Saturday (Isolation & Core)": {
+        "core": ["Leg Press Machine", "Chest Fly Machine", "Captain's Chair Leg Raises"],
         "optional": ["Calf Raises", "Dumbbell Shrugs"]
     }
 }
@@ -46,7 +43,7 @@ elif current_day == "Saturday": default_index = 2
 st.header("Today's Training Plan")
 routine_choice = st.selectbox("Select Workout Routine:", list(ROUTINES.keys()), index=default_index)
 
-st.subheader("📋 Core Minimum Exercises (Do these first)")
+st.subheader("📋 Core Minimum Exercises")
 for ex in ROUTINES[routine_choice]["core"]:
     st.markdown(f"**• {ex}**")
 
@@ -91,18 +88,15 @@ if st.session_state.session_log:
     session_df = pd.DataFrame(st.session_state.session_log)
     st.dataframe(session_df, use_container_width=True)
     
-    # Save button handles appending to Google Sheets
     if st.button("💾 Save Entire Workout to Google Sheets"):
         with st.spinner("Pushing workout to the cloud..."):
-            # Combine historical data with new data
             new_sets_df = pd.DataFrame(st.session_state.session_log)
             updated_df = pd.concat([existing_df, new_sets_df], ignore_index=True)
             
-            # Update the Google Sheet
             conn.update(worksheet="Logs", data=updated_df)
             
             st.success("Workout safely saved to Google Sheets!")
-            st.session_state.session_log = [] # Wipe temporary local memory cache
+            st.session_state.session_log = [] 
             st.rerun()
 
 # --- HISTORICAL PROGRESS VISUALIZATION ---
@@ -110,16 +104,11 @@ if not existing_df.empty:
     st.write("---")
     st.header("📈 Progress History")
     
-    # Make sure formatting is correct for mapping
     existing_df["Date"] = pd.to_datetime(existing_df["Date"])
-    
     filter_exercise = st.selectbox("View Progress Chart For:", existing_df["Exercise"].unique())
     filtered_df = existing_df[existing_df["Exercise"] == filter_exercise].sort_values(by="Date")
     
     if not filtered_df.empty:
-        # Group by date and take the maximum weight lifted that day
         progress_df = filtered_df.groupby("Date")["Weight (lbs)"].max().reset_index()
         st.line_chart(data=progress_df, x="Date", y="Weight (lbs)")
-        
-        st.subheader("Raw History Table")
         st.dataframe(filtered_df.sort_values(by="Date", ascending=False), use_container_width=True, hide_index=True)
