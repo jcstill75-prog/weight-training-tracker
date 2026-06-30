@@ -67,7 +67,7 @@ exercise_input = st.selectbox("Select Exercise Lift:", available_exercises)
 # --- SMART PROGRESSIVE OVERLOAD COACHING ---
 if not existing_df.empty:
     # Filter history for just this exercise
-    ex_history = existing_df[existing_df["Exercise"] == exercise_input]
+    ex_history = existing_df[existing_df["Exercise"] == exercise_input].copy()
     
     if not ex_history.empty:
         # Get the most recent date this exercise was performed
@@ -101,49 +101,4 @@ if "session_log" not in st.session_state:
 with st.form("log_form", clear_on_submit=True):
     date_input = st.date_input("Date", datetime.date.today())
     weight_input = st.number_input("Weight (lbs)", min_value=0, step=5, value=100)
-    reps_input = st.number_input("Reps Completed", min_value=0, step=1, value=10)
-    difficulty_input = st.selectbox("Workout Intensity Feel:", ["Moderate", "Easy", "Hard"])
-    
-    submit_set = st.form_submit_button("Record Set")
-
-if submit_set:
-    set_data = {
-        "Date": date_input.strftime("%Y-%m-%d"),
-        "Exercise": exercise_input,
-        "Weight (lbs)": int(weight_input),
-        "Reps": int(reps_input),
-        "Difficulty": difficulty_input
-    }
-    st.session_state.session_log.append(set_data)
-    st.success(f"Recorded: {exercise_input} — {weight_input} lbs x {reps_input} reps ({difficulty_input})")
-
-# Live screen display of the ongoing session
-if st.session_state.session_log:
-    st.subheader("Current Session Live View")
-    session_df = pd.DataFrame(st.session_state.session_log)
-    st.dataframe(session_df, use_container_width=True)
-    
-    if st.button("💾 Save Entire Workout to Google Sheets"):
-        with st.spinner("Pushing workout to the cloud..."):
-            new_sets_df = pd.DataFrame(st.session_state.session_log)
-            updated_df = pd.concat([existing_df, new_sets_df], ignore_index=True)
-            
-            conn.update(worksheet="Logs", data=updated_df)
-            
-            st.success("Workout safely saved to Google Sheets!")
-            st.session_state.session_log = [] 
-            st.rerun()
-
-# --- HISTORICAL PROGRESS VISUALIZATION ---
-if not existing_df.empty:
-    st.write("---")
-    st.header("📈 Progress History")
-    
-    existing_df["Date"] = pd.to_datetime(existing_df["Date"])
-    filter_exercise = st.selectbox("View Progress Chart For:", existing_df["Exercise"].unique(), key="viz_filter")
-    filtered_df = existing_df[existing_df["Exercise"] == filter_exercise].sort_values(by="Date")
-    
-    if not filtered_df.empty:
-        progress_df = filtered_df.groupby("Date")["Weight (lbs)"].max().reset_index()
-        st.line_chart(data=progress_df, x="Date", y="Weight (lbs)")
-        st.dataframe(filtered_df.sort_values(by="Date", ascending=False), use_container_width=True, hide_index=True)
+    reps_input = st
