@@ -52,7 +52,6 @@ for ex in ROUTINES[routine_choice]["core"]:
 st.write("---")
 has_extra_time = st.checkbox("➕ I have extra time today! Show bonus & abdominal exercises.")
 
-# 🟢 FIX: Ensure available_exercises is fully built before drawing any logging fields
 available_exercises = ROUTINES[routine_choice]["core"].copy()
 if has_extra_time:
     st.subheader("🔥 Optional Bonus & Core Movements")
@@ -64,7 +63,6 @@ if has_extra_time:
 st.write("---")
 st.subheader("Log Your Sets")
 
-# Select exercise lift (This dropdown will now always behave, checked or unchecked)
 exercise_input = st.selectbox("Select Exercise Lift:", available_exercises)
 
 # --- SMART PROGRESSIVE OVERLOAD COACHING ---
@@ -97,7 +95,6 @@ if not existing_df.empty:
 if "session_log" not in st.session_state:
     st.session_state.session_log = []
 
-# 🟢 FIX: Moved logging entry fields safely down here so they load consistently every time
 date_input = st.date_input("Date", datetime.date.today())
 weight_input = st.number_input("Weight (lbs) - Set to 0 for bodyweight", min_value=0.0, step=0.5, value=10.0 if exercise_input not in ALL_ABS else 0.0)
 reps_input = st.number_input("Reps Completed (or Seconds for Plank)", min_value=0, step=1, value=10)
@@ -126,14 +123,33 @@ if st.session_state.session_log:
         with st.spinner("Pushing workout to the cloud..."):
             new_sets_df = pd.DataFrame(st.session_state.session_log)
             updated_df = pd.concat([existing_df, new_sets_df], ignore_index=True)
-            updated_df["Date"] = pd.to_datetime(updated_df["Date"])
-            updated_df["Date"] = updated_df["Date"].dt.strftime("%Y-%m-%d")
             
-            conn.update(worksheet="Logs", data=updated_df)
+            # Clean formats
+            updated_df["Date"] = pd.to_datetime(updated_df["Date"]).dt.strftime("%Y-%m-%d")
+            updated_df["Weight (lbs)"] = updated_df["Weight (lbs)"].astype(float)
+            updated_df["Reps"] = updated_df["Reps"].astype(int)
+            updated_df["Difficulty"] = updated_df["Difficulty"].astype(str)
             
-            st.success("Workout safely saved to Google Sheets!")
-            st.session_state.session_log = [] 
-            st.rerun()
+            # 🟢 THE FIXED SAVE BACKEND: Bypasses wrapper to write raw data matrix via gspread
+            try:
+                # Grab backend client directly from connection structure
+                gc = conn._client
+                spreadsheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+                sh = gc.open_by_url(spreadsheet_url)
+                worksheet = sh.worksheet("Logs")
+                
+                # Convert dataframe to a web-safe list of rows
+                data_to_upload = [updated_df.columns.tolist()] + updated_df.values.tolist()
+                
+                # Clear and rewrite sheet securely
+                worksheet.clear()
+                worksheet.update(data_to_upload)
+                
+                st.success("Workout safely saved to Google Sheets!")
+                st.session_state.session_log = [] 
+                st.rerun()
+            except Exception as e:
+                st.error(f"Save failed via wrapper backend. Direct error detail: {e}")
 
 # --- HISTORICAL PROGRESS VISUALIZATION ---
 if not existing_df.empty:
