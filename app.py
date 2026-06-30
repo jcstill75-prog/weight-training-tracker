@@ -80,11 +80,11 @@ if not existing_df.empty:
         else:
             calc_target = last_max_weight * 1.025
             
-        recommended_target = int(5 * round(calc_target / 5))
+        recommended_target = float(round(calc_target * 2) / 2) # Round to nearest 0.5 lbs
         if recommended_target == last_max_weight:
-            recommended_target += 5
+            recommended_target += 0.5
             
-        st.info(f"💡 **AI Coach Advice:** Last time you performed this exercise, your max weight was **{int(last_max_weight)} lbs**. Today, aim for **{recommended_target} lbs** to stay on track with progressive overload!")
+        st.info(f"💡 **AI Coach Advice:** Last time you performed this exercise, your max weight was **{last_max_weight} lbs**. Today, aim for **{recommended_target} lbs** to stay on track with progressive overload!")
     else:
         st.info("💡 **AI Coach Advice:** First time logging this movement! Pick a comfortable baseline weight to establish your starting metric.")
 
@@ -93,7 +93,9 @@ if "session_log" not in st.session_state:
 
 # Clean input layout
 date_input = st.date_input("Date", datetime.date.today())
-weight_input = st.number_input("Weight (lbs)", min_value=0, step=5, value=100)
+
+# 🟢 FIX: Changed step to 0.5 and default value to 10.0 to support floats/decimals
+weight_input = st.number_input("Weight (lbs)", min_value=0.0, step=0.5, value=10.0)
 reps_input = st.number_input("Reps Completed", min_value=0, step=1, value=10)
 difficulty_input = st.selectbox("Workout Intensity Feel:", ["Moderate", "Easy", "Hard"])
 
@@ -103,7 +105,7 @@ if submit_set:
     set_data = {
         "Date": date_input.strftime("%Y-%m-%d"),
         "Exercise": exercise_input,
-        "Weight (lbs)": int(weight_input),
+        "Weight (lbs)": float(weight_input), # 🟢 FIX: Extracted as float instead of converting to integer
         "Reps": int(reps_input),
         "Difficulty": difficulty_input
     }
@@ -119,3 +121,30 @@ if st.session_state.session_log:
     if st.button("💾 Save Entire Workout to Google Sheets"):
         with st.spinner("Pushing workout to the cloud..."):
             new_sets_df = pd.DataFrame(st.session_state.session_log)
+            
+            if not existing_df.empty:
+                existing_df["Date"] = pd.to_datetime(existing_df["Date"])
+                
+            new_sets_df["Date"] = pd.to_datetime(new_sets_df["Date"])
+            updated_df = pd.concat([existing_df, new_sets_df], ignore_index=True)
+            updated_df["Date"] = updated_df["Date"].dt.strftime("%Y-%m-%d")
+            
+            conn.update(worksheet="Logs", data=updated_df)
+            
+            st.success("Workout safely saved to Google Sheets!")
+            st.session_state.session_log = [] 
+            st.rerun()
+
+# --- HISTORICAL PROGRESS VISUALIZATION ---
+if not existing_df.empty:
+    st.write("---")
+    st.header("📈 Progress History")
+    
+    existing_df["Date"] = pd.to_datetime(existing_df["Date"])
+    filter_exercise = st.selectbox("View Progress Chart For:", existing_df["Exercise"].unique(), key="viz_filter")
+    filtered_df = existing_df[existing_df["Exercise"] == filter_exercise].sort_values(by="Date")
+    
+    if not filtered_df.empty:
+        progress_df = filtered_df.groupby("Date")["Weight (lbs)"].max().reset_index()
+        st.line_chart(data=progress_df, x="Date", y="Weight (lbs)")
+        st.dataframe(filtered_df.sort_values(by="Date", ascending=False), use_container_width=True, hide_index=True)
