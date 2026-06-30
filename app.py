@@ -56,6 +56,29 @@ ROUTINES = {
     }
 }
 
+# 🟢 NEW FEATURE: Custom Target Rep Dictionary
+REP_TARGETS = {
+    "Bench Press Machine": "8–12 reps",
+    "Lat Pulldown Machine": "8–12 reps",
+    "Leg Press Machine": "10–12 reps (12–15 reps on Saturdays)",
+    "Seated Row Machine": "10–12 reps",
+    "Dumbbell Shoulder Press": "10–12 reps",
+    "Cable Tricep Pushdown": "10–12 reps",
+    "Seated Dip Machine": "10–12 reps",
+    "Chest Fly Machine": "10–12 reps",
+    "Dumbbell Bicep Curl": "12 reps",
+    "Dumbbell Lateral Raises": "12–15 reps",
+    "Hammer Curls": "10–12 reps",
+    "Face Pulls": "12–15 reps",
+    "Calf Raises": "12–15 reps",
+    "Dumbbell Shrugs": "10–12 reps",
+    "Captain's Chair Leg Raises": "10–12 reps",
+    "Crunches": "12–15 reps",
+    "Hanging Knee Raises": "10–12 reps",
+    "Russian Twists": "12 reps each side",
+    "Plank": "30–60 seconds"
+}
+
 # Auto-detect day of the week
 current_day = datetime.datetime.now().strftime("%A")
 default_index = 0
@@ -88,8 +111,10 @@ st.subheader("Log Your Sets")
 exercise_input = st.selectbox("Select Exercise Lift:", available_exercises)
 
 # --- SMART PROGRESSIVE OVERLOAD COACHING ---
+target_rep_range = REP_TARGETS.get(exercise_input, "10–12 reps")
+
 if not existing_df.empty and "Exercise" in existing_df.columns:
-    ex_history = existing_df[existing_df["Exercise"] == exercise_input].copy()
+    ex_history = existing_df[existing_df["Existing_df" if "Existing_df" in existing_df.columns else "Exercise"] == exercise_input].copy()
     
     if not ex_history.empty:
         ex_history["Date"] = pd.to_datetime(ex_history["Date"])
@@ -108,11 +133,13 @@ if not existing_df.empty and "Exercise" in existing_df.columns:
             recommended_target += 0.5
             
         if exercise_input in ALL_ABS and last_max_weight == 0:
-            st.info(f"💡 **AI Coach Advice:** Last time you did this, you logged bodyweight reps. Try to beat your previous repetition count!")
+            st.info(f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Try to beat your previous repetition count or duration!")
         else:
-            st.info(f"💡 **AI Coach Advice:** Last time you performed this exercise, your max weight was **{last_max_weight} lbs**. Today, aim for **{recommended_target} lbs** to stay on track with progressive overload!")
+            st.info(f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Last time your max weight was **{last_max_weight} lbs**. Today, your target is **{recommended_target} lbs**!")
     else:
-        st.info("💡 **AI Coach Advice:** First time logging this movement! Pick a comfortable baseline metric to establish your starting point.")
+        st.info(f"💡 **AI Coach Advice:** First time logging this movement! Aim for **{target_rep_range}** at a comfortable baseline weight.")
+else:
+    st.info(f"💡 **AI Coach Advice:** Aim for **{target_rep_range}** at a comfortable baseline weight.")
 
 if "session_log" not in st.session_state:
     st.session_state.session_log = []
@@ -160,7 +187,6 @@ if st.session_state.session_log:
                 st.success("Workout safely saved to Google Sheets!")
                 st.session_state.session_log = [] 
                 
-                # 🟢 THE FIX: Correct modern method to clear cache and refresh smoothly
                 st.cache_resource.clear() 
                 st.rerun()
             except Exception as save_error:
