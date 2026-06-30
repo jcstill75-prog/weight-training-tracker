@@ -17,18 +17,19 @@ except Exception:
     existing_df = pd.DataFrame(columns=["Date", "Exercise", "Weight (lbs)", "Reps", "Difficulty"])
 
 # --- WORKOUT ROUTINE DEFINITIONS ---
+# All abdominal and core exercises are now moved strictly to the "optional" sections
 ROUTINES = {
     "Monday (Push Focus)": {
         "core": ["Bench Press Machine", "Leg Press Machine", "Dumbbell Shoulder Press", "Cable Tricep Pushdown", "Seated Dip Machine"],
-        "optional": ["Dumbbell Lateral Raises"]
+        "optional": ["Dumbbell Lateral Raises", "Crunches", "Plank"]
     },
     "Wednesday (Pull Focus)": {
         "core": ["Lat Pulldown Machine", "Seated Row Machine", "Dumbbell Bicep Curl"],
-        "optional": ["Hammer Curls", "Face Pulls"]
+        "optional": ["Hammer Curls", "Face Pulls", "Russian Twists"]
     },
-    "Saturday (Isolation & Core)": {
-        "core": ["Leg Press Machine", "Chest Fly Machine", "Captain's Chair Leg Raises"],
-        "optional": ["Calf Raises", "Dumbbell Shrugs"]
+    "Saturday (Isolation Focus)": {
+        "core": ["Leg Press Machine", "Chest Fly Machine"],
+        "optional": ["Calf Raises", "Dumbbell Shrugs", "Captain's Chair Leg Raises", "Hanging Knee Raises"]
     }
 }
 
@@ -48,11 +49,11 @@ for ex in ROUTINES[routine_choice]["core"]:
     st.markdown(f"**• {ex}**")
 
 st.write("---")
-has_extra_time = st.checkbox("➕ I have extra time today! Show bonus exercises.")
+has_extra_time = st.checkbox("➕ I have extra time today! Show bonus & abdominal exercises.")
 
 available_exercises = ROUTINES[routine_choice]["core"].copy()
 if has_extra_time:
-    st.subheader("🔥 Optional Bonus Movements")
+    st.subheader("🔥 Optional Bonus & Core Movements")
     for ex in ROUTINES[routine_choice]["optional"]:
         st.markdown(f"**• {ex}**")
     available_exercises.extend(ROUTINES[routine_choice]["optional"])
@@ -80,13 +81,17 @@ if not existing_df.empty:
         else:
             calc_target = last_max_weight * 1.025
             
-        recommended_target = float(round(calc_target * 2) / 2) # Round to nearest 0.5 lbs
+        recommended_target = float(round(calc_target * 2) / 2)
         if recommended_target == last_max_weight:
             recommended_target += 0.5
             
-        st.info(f"💡 **AI Coach Advice:** Last time you performed this exercise, your max weight was **{last_max_weight} lbs**. Today, aim for **{recommended_target} lbs** to stay on track with progressive overload!")
+        # Hide target weight advice for bodyweight core moves like Planks/Crunches where tracking weight isn't the primary goal
+        if exercise_input in ["Plank", "Crunches", "Captain's Chair Leg Raises", "Hanging Knee Raises", "Russian Twists"] and last_max_weight == 0:
+            st.info(f"💡 **AI Coach Advice:** Last time you did this, you logged bodyweight reps. Try to beat your previous repetition count or duration!")
+        else:
+            st.info(f"💡 **AI Coach Advice:** Last time you performed this exercise, your max weight was **{last_max_weight} lbs**. Today, aim for **{recommended_target} lbs** to stay on track with progressive overload!")
     else:
-        st.info("💡 **AI Coach Advice:** First time logging this movement! Pick a comfortable baseline weight to establish your starting metric.")
+        st.info("💡 **AI Coach Advice:** First time logging this movement! Pick a comfortable baseline weight/reps to establish your starting metric.")
 
 if "session_log" not in st.session_state:
     st.session_state.session_log = []
@@ -94,9 +99,9 @@ if "session_log" not in st.session_state:
 # Clean input layout
 date_input = st.date_input("Date", datetime.date.today())
 
-# 🟢 FIX: Changed step to 0.5 and default value to 10.0 to support floats/decimals
-weight_input = st.number_input("Weight (lbs)", min_value=0.0, step=0.5, value=10.0)
-reps_input = st.number_input("Reps Completed", min_value=0, step=1, value=10)
+# Note: Set weight to 0.0 if doing standard bodyweight crunches/planks
+weight_input = st.number_input("Weight (lbs) - Set to 0 for bodyweight", min_value=0.0, step=0.5, value=10.0 if exercise_input not in ["Plank", "Crunches", "Captain's Chair Leg Raises", "Hanging Knee Raises", "Russian Twists"] else 0.0)
+reps_input = st.number_input("Reps Completed (or Seconds for Plank)", min_value=0, step=1, value=10)
 difficulty_input = st.selectbox("Workout Intensity Feel:", ["Moderate", "Easy", "Hard"])
 
 submit_set = st.button("Record Set")
@@ -105,7 +110,7 @@ if submit_set:
     set_data = {
         "Date": date_input.strftime("%Y-%m-%d"),
         "Exercise": exercise_input,
-        "Weight (lbs)": float(weight_input), # 🟢 FIX: Extracted as float instead of converting to integer
+        "Weight (lbs)": float(weight_input),
         "Reps": int(reps_input),
         "Difficulty": difficulty_input
     }
@@ -122,11 +127,13 @@ if st.session_state.session_log:
         with st.spinner("Pushing workout to the cloud..."):
             new_sets_df = pd.DataFrame(st.session_state.session_log)
             
-            if not existing_df.empty:
-                existing_df["Date"] = pd.to_datetime(existing_df["Date"])
-                
-            new_sets_df["Date"] = pd.to_datetime(new_sets_df["Date"])
+            # Combine datasets first
             updated_df = pd.concat([existing_df, new_sets_df], ignore_index=True)
+            
+            # Explicitly convert the combined Date column to datetime first
+            updated_df["Date"] = pd.to_datetime(updated_df["Date"])
+            
+            # Now format securely to strings for Google Sheets
             updated_df["Date"] = updated_df["Date"].dt.strftime("%Y-%m-%d")
             
             conn.update(worksheet="Logs", data=updated_df)
