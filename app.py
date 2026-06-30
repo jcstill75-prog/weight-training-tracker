@@ -3,8 +3,8 @@ import pandas as pd
 import datetime
 import gspread
 
-st.set_page_config(page_title="60-Min Workout Tracker", page_icon="🏋️‍♂️", layout="centered")
-st.title("🏋️‍♂️ 60-Min Workout Tracker")
+st.set_page_config(page_title="Workout Tracker", page_icon="🏋️‍♂️", layout="centered")
+st.title("🏋️‍♂️ Workout Tracker")
 
 # --- INITIALIZE NATIVE GOOGLE SHEETS CONNECTION ---
 @st.cache_resource
@@ -41,26 +41,26 @@ except Exception as e:
 # --- WORKOUT ROUTINE DEFINITIONS ---
 ALL_ABS = ["Captain's Chair Leg Raises", "Plank", "Crunches", "Hanging Knee Raises", "Russian Twists"]
 
+# 🟢 REFACTOR: Days of the week completely removed from the labels
 ROUTINES = {
-    "Monday (Push Focus)": {
+    "Push Focus": {
         "core": ["Bench Press Machine", "Leg Press Machine", "Dumbbell Shoulder Press", "Cable Tricep Pushdown", "Seated Dip Machine"],
         "optional": ["Dumbbell Lateral Raises"] + ALL_ABS
     },
-    "Wednesday (Pull Focus)": {
+    "Pull Focus": {
         "core": ["Lat Pulldown Machine", "Seated Row Machine", "Dumbbell Bicep Curl"],
         "optional": ["Hammer Curls", "Face Pulls"] + ALL_ABS
     },
-    "Saturday (Isolation Focus)": {
+    "Isolation Focus": {
         "core": ["Leg Press Machine", "Chest Fly Machine"],
         "optional": ["Calf Raises", "Dumbbell Shrugs"] + ALL_ABS
     }
 }
 
-# 🟢 NEW FEATURE: Custom Target Rep Dictionary
 REP_TARGETS = {
     "Bench Press Machine": "8–12 reps",
     "Lat Pulldown Machine": "8–12 reps",
-    "Leg Press Machine": "10–12 reps (12–15 reps on Saturdays)",
+    "Leg Press Machine": "10–12 reps (12–15 reps on Isolation days)",
     "Seated Row Machine": "10–12 reps",
     "Dumbbell Shoulder Press": "10–12 reps",
     "Cable Tricep Pushdown": "10–12 reps",
@@ -79,16 +79,10 @@ REP_TARGETS = {
     "Plank": "30–60 seconds"
 }
 
-# Auto-detect day of the week
-current_day = datetime.datetime.now().strftime("%A")
-default_index = 0
-if current_day == "Monday": default_index = 0
-elif current_day == "Wednesday": default_index = 1
-elif current_day == "Saturday": default_index = 2
-
 # --- USER INTERFACE ---
 st.header("Today's Training Plan")
-routine_choice = st.selectbox("Select Workout Routine:", list(ROUTINES.keys()), index=default_index)
+# Defaults simply to the first item ("Push Focus") now instead of tracking specific days
+routine_choice = st.selectbox("Select Workout Routine:", list(ROUTINES.keys()), index=0)
 
 st.subheader("📋 Core Minimum Exercises")
 for ex in ROUTINES[routine_choice]["core"]:
@@ -114,7 +108,7 @@ exercise_input = st.selectbox("Select Exercise Lift:", available_exercises)
 target_rep_range = REP_TARGETS.get(exercise_input, "10–12 reps")
 
 if not existing_df.empty and "Exercise" in existing_df.columns:
-    ex_history = existing_df[existing_df["Existing_df" if "Existing_df" in existing_df.columns else "Exercise"] == exercise_input].copy()
+    ex_history = existing_df[existing_df["Exercise"] == exercise_input].copy()
     
     if not ex_history.empty:
         ex_history["Date"] = pd.to_datetime(ex_history["Date"])
