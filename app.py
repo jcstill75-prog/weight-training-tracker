@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import gspread
+import math
 
 st.set_page_config(page_title="Workout Tracker", page_icon="🏋️‍♂️", layout="centered")
 st.title("🏋️‍♂️ Workout Tracker")
@@ -78,15 +79,15 @@ REP_TARGETS = {
     "Plank": "30–60 seconds"
 }
 
-# 🟢 REFACTOR: Adjusted to 0.0 to strictly match plate weight tracked by the user
-def calculate_leg_press_plates(total_target_weight):
-    SLED_WEIGHT = 0.0 
-    weight_to_add = total_target_weight - SLED_WEIGHT
+# 🟢 REFACTOR: Rounds up total weight to the next possible 10-lb plate combination
+def calculate_leg_press_plates(raw_target_weight):
+    # Round up to the nearest multiple of 10 (since min increment per side is 5 lbs)
+    total_target_weight = math.ceil(raw_target_weight / 10.0) * 10
     
-    if weight_to_add <= 0:
-        return "Load nothing!"
+    if total_target_weight <= 0:
+        return total_target_weight, "Load nothing!"
         
-    weight_per_side = weight_to_add / 2.0
+    weight_per_side = total_target_weight / 2.0
     
     plates = {45: 0, 25: 0, 10: 0, 5: 0}
     remaining = weight_per_side
@@ -100,11 +101,8 @@ def calculate_leg_press_plates(total_target_weight):
     for size, count in plates.items():
         if count > 0:
             parts.append(f"{count}x {size} lb")
-            
-    if remaining > 0:
-        parts.append(f"{remaining} lbs")
         
-    return f"Load **EACH SIDE** with: " + ", ".join(parts)
+    return total_target_weight, f"Load **EACH SIDE** with: " + ", ".join(parts)
 
 # --- USER INTERFACE ---
 st.header("Today's Training Plan")
@@ -145,21 +143,25 @@ if not existing_df.empty and "Exercise" in existing_df.columns:
         
         if exercise_input == "Leg Press Machine":
             calc_target = last_max_weight * 1.05
+            # Force at least a 10 lb total load increase if a 5% bump doesn't push past the rounding threshold
+            if math.ceil(calc_target / 10.0) * 10 == last_max_weight:
+                calc_target = last_max_weight + 10
         else:
             calc_target = last_max_weight * 1.025
             
         recommended_target = float(round(calc_target * 2) / 2)
-        if recommended_target == last_max_weight:
+        if recommended_target == last_max_weight and exercise_input != "Leg Press Machine":
             recommended_target += 0.5
             
         if exercise_input in ALL_ABS and last_max_weight == 0:
             st.info(f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Try to beat your previous repetition count or duration!")
         else:
-            advice_text = f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Last time your max weight was **{last_max_weight} lbs**. Today, your target is **{recommended_target} lbs**!"
-            
+            # For leg press, compute rounded target and plate breakout text
             if exercise_input == "Leg Press Machine":
-                plate_breakout = calculate_leg_press_plates(recommended_target)
-                advice_text += f"\n\n⚙️ **Plate Config:** {plate_breakout}"
+                recommended_target, plate_breakout = calculate_leg_press_plates(calc_target)
+                advice_text = f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Last time your max added weight was **{int(last_max_weight)} lbs**. Today, your rounded target is **{int(recommended_target)} lbs**!\n\n⚙️ **Plate Config:** {plate_breakout}"
+            else:
+                advice_text = f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Last time your max weight was **{last_max_weight} lbs**. Today, your target is **{recommended_target} lbs**!"
                 
             st.info(advice_text)
     else:
@@ -171,7 +173,7 @@ if "session_log" not in st.session_state:
     st.session_state.session_log = []
 
 date_input = st.date_input("Date", datetime.date.today())
-weight_input = st.number_input("Weight (lbs) - Set to 0 for bodyweight", min_value=0.0, step=0.5, value=10.0 if exercise_input not in ALL_ABS else 0.0)
+weight_input = st.number_input("Weight (lbs) - Set to 0 for bodyweight", min_value=0.0, step=0.5, value=float(recommended_target) if (not existing_df.empty and not ex_history.empty and exercise_input not in ALL_ABS) else (10.0 if exercise_input not in ALL_ABS else 0.0))
 reps_input = st.number_input("Reps Completed (or Seconds for Plank)", min_value=0, step=1, value=10)
 difficulty_input = st.selectbox("Workout Intensity Feel:", ["Moderate", "Easy", "Hard"])
 
