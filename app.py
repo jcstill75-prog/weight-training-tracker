@@ -91,7 +91,7 @@ if not existing_df.empty:
 if "session_log" not in st.session_state:
     st.session_state.session_log = []
 
-# Clean, regular input layout (No more st.form)
+# Clean input layout
 date_input = st.date_input("Date", datetime.date.today())
 weight_input = st.number_input("Weight (lbs)", min_value=0, step=5, value=100)
 reps_input = st.number_input("Reps Completed", min_value=0, step=1, value=10)
@@ -106,3 +106,16 @@ if submit_set:
         "Weight (lbs)": int(weight_input),
         "Reps": int(reps_input),
         "Difficulty": difficulty_input
+    }
+    st.session_state.session_log.append(set_data)
+    st.success(f"Recorded: {exercise_input} — {weight_input} lbs x {reps_input} reps ({difficulty_input})")
+
+# Live screen display of the ongoing session
+if st.session_state.session_log:
+    st.subheader("Current Session Live View")
+    session_df = pd.DataFrame(st.session_state.session_log)
+    st.dataframe(session_df, use_container_width=True)
+    
+    if st.button("💾 Save Entire Workout to Google Sheets"):
+        with st.spinner("Pushing workout to the cloud..."):
+            new_sets_df = pd.DataFrame(st.session_state.session_log)
