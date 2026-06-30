@@ -9,7 +9,6 @@ st.title("🏋️‍♂️ 60-Min Workout Tracker")
 # --- INITIALIZE NATIVE GOOGLE SHEETS CONNECTION ---
 @st.cache_resource
 def get_gspread_client():
-    # Authenticate directly using the secrets you already stored in Streamlit Advanced Settings
     creds = {
         "type": st.secrets["connections"]["gsheets"]["type"],
         "project_id": st.secrets["connections"]["gsheets"]["project_id"],
@@ -30,7 +29,6 @@ try:
     sh = gc.open_by_url(spreadsheet_url)
     worksheet = sh.worksheet("Logs")
     
-    # Read existing data cleanly into a dataframe
     records = worksheet.get_all_records()
     if records:
         existing_df = pd.DataFrame(records)
@@ -148,14 +146,12 @@ if st.session_state.session_log:
             new_sets_df = pd.DataFrame(st.session_state.session_log)
             updated_df = pd.concat([existing_df, new_sets_df], ignore_index=True)
             
-            # Formats uniform layout
             updated_df["Date"] = pd.to_datetime(updated_df["Date"]).dt.strftime("%Y-%m-%d")
             updated_df["Weight (lbs)"] = updated_df["Weight (lbs)"].astype(float)
             updated_df["Reps"] = updated_df["Reps"].astype(int)
             updated_df["Difficulty"] = updated_df["Difficulty"].astype(str)
             
             try:
-                # Direct data frame conversion to nested rows list for gspread
                 data_to_upload = [updated_df.columns.tolist()] + updated_df.values.tolist()
                 
                 worksheet.clear()
@@ -163,7 +159,9 @@ if st.session_state.session_log:
                 
                 st.success("Workout safely saved to Google Sheets!")
                 st.session_state.session_log = [] 
-                st.clear_cache() # Clears reading cache so updates display instantly
+                
+                # 🟢 THE FIX: Correct modern method to clear cache and refresh smoothly
+                st.cache_resource.clear() 
                 st.rerun()
             except Exception as save_error:
                 st.error(f"Save failed: {save_error}")
