@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import gspread
 import math
+import time
 
 st.set_page_config(page_title="Workout Tracker", page_icon="🏋️‍♂️", layout="centered")
 st.title("🏋️‍♂️ Workout Tracker")
@@ -79,16 +80,12 @@ REP_TARGETS = {
     "Plank": "30–60 seconds"
 }
 
-# 🟢 REFACTOR: Rounds up total weight to the next possible 10-lb plate combination
 def calculate_leg_press_plates(raw_target_weight):
-    # Round up to the nearest multiple of 10 (since min increment per side is 5 lbs)
     total_target_weight = math.ceil(raw_target_weight / 10.0) * 10
-    
     if total_target_weight <= 0:
         return total_target_weight, "Load nothing!"
         
     weight_per_side = total_target_weight / 2.0
-    
     plates = {45: 0, 25: 0, 10: 0, 5: 0}
     remaining = weight_per_side
     
@@ -143,7 +140,6 @@ if not existing_df.empty and "Exercise" in existing_df.columns:
         
         if exercise_input == "Leg Press Machine":
             calc_target = last_max_weight * 1.05
-            # Force at least a 10 lb total load increase if a 5% bump doesn't push past the rounding threshold
             if math.ceil(calc_target / 10.0) * 10 == last_max_weight:
                 calc_target = last_max_weight + 10
         else:
@@ -156,7 +152,6 @@ if not existing_df.empty and "Exercise" in existing_df.columns:
         if exercise_input in ALL_ABS and last_max_weight == 0:
             st.info(f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Try to beat your previous repetition count or duration!")
         else:
-            # For leg press, compute rounded target and plate breakout text
             if exercise_input == "Leg Press Machine":
                 recommended_target, plate_breakout = calculate_leg_press_plates(calc_target)
                 advice_text = f"💡 **AI Coach Advice:** Aim for **{target_rep_range}**. Last time your max added weight was **{int(last_max_weight)} lbs**. Today, your rounded target is **{int(recommended_target)} lbs**!\n\n⚙️ **Plate Config:** {plate_breakout}"
@@ -189,9 +184,44 @@ if submit_set:
     }
     st.session_state.session_log.append(set_data)
     st.success(f"Recorded: {exercise_input} — {weight_input} lbs x {reps_input} reps ({difficulty_input})")
+    
+    # 🟢 NEW FEATURE: The Smart Rest Countdown Timer
+    # Assign specific recovery windows based on movement types
+    if exercise_input in ["Bench Press Machine", "Leg Press Machine"]:
+        rest_seconds = 90
+    elif exercise_input in ALL_ABS:
+        rest_seconds = 45
+    else:
+        rest_seconds = 60  # Default isolation time
+        
+    st.write("---")
+    st.subheader("⏱️ Rest Timer Active")
+    
+    # Create empty layout placeholders to make the numbers tick cleanly without rewriting the page
+    timer_box = st.empty()
+    progress_bar = st.progress(1.0)
+    
+    for remaining in range(rest_seconds, -1, -1):
+        mins, secs = divmod(remaining, 60)
+        time_display = f"{mins:02d}:{secs:02d}"
+        
+        # Display the live text countdown
+        timer_box.metric(label=f"Resting after logging {exercise_input}", value=time_display, delta="Rest up before your next push!")
+        
+        # Update progress slider percentage
+        progress_bar.progress(remaining / rest_seconds)
+        
+        # Pause for exactly 1 absolute second
+        time.sleep(1)
+        
+    timer_box.empty()
+    progress_bar.empty()
+    st.balloons()  # Small subtle phone vibration pop to alert you rest time is over
+    st.success("💪 Rest Over! Time for the next set.")
 
 # Live screen display of the ongoing session
 if st.session_state.session_log:
+    st.write("---")
     st.subheader("Current Session Live View")
     session_df = pd.DataFrame(st.session_state.session_log)
     st.dataframe(session_df, use_container_width=True)
@@ -208,13 +238,10 @@ if st.session_state.session_log:
             
             try:
                 data_to_upload = [updated_df.columns.tolist()] + updated_df.values.tolist()
-                
                 worksheet.clear()
                 worksheet.update(values=data_to_upload, range_name="A1")
-                
                 st.success("Workout safely saved to Google Sheets!")
                 st.session_state.session_log = [] 
-                
                 st.cache_resource.clear() 
                 st.rerun()
             except Exception as save_error:
@@ -224,7 +251,6 @@ if st.session_state.session_log:
 if not existing_df.empty and "Exercise" in existing_df.columns:
     st.write("---")
     st.header("📈 Progress History")
-    
     existing_df["Date"] = pd.to_datetime(existing_df["Date"])
     filter_exercise = st.selectbox("View Progress Chart For:", existing_df["Exercise"].unique(), key="viz_filter")
     filtered_df = existing_df[existing_df["Exercise"] == filter_exercise].sort_values(by="Date")
